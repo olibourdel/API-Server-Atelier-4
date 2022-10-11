@@ -84,7 +84,7 @@
             let hideSearchBar = true;
             let bookmarkIdToDelete = 0; // used by confirmDeleteDlg
             let selectedCategory = "";
-
+            let previousScrollPosition = 0;
             init_UI();
             HEAD(checkETag, error);
             setInterval(() => { HEAD(checkETag, error) }, periodicRefreshPeriod * 1000);
@@ -141,6 +141,7 @@
                     $("#bookmarksList").append(bookmarkRow);
                 }
                 currentETag = ETag;
+                previousScrollPosition = $(".scrollContainer").scrollTop();
                 $("#bookmarksList").empty();
                 let currentCategory = "";
                 for (let bookmark of bookmarks) {
@@ -150,6 +151,7 @@
                         bookmark.Category = "";
                     insertIntoBookmarkList(bookmark);
                 }
+                $(".scrollContainer").scrollTop(previousScrollPosition);
                 $(".editCmd").click(e => { editBookmark(e) });
                 $(".deleteCmd").click(e => { deleteBookmark(e) });
                 $('[data-toggle="tooltip"]').tooltip();
