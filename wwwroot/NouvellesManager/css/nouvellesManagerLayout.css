@@ -1,0 +1,105 @@
+/*
+    auteur: Nicolas Chourot
+ */
+body {
+    background-image: linear-gradient(45deg, rgb(238, 235, 144), rgb(100, 87, 0));
+}
+.container {
+    margin-bottom: 100px;
+}
+button {
+    padding: 2px 3px;
+    padding-left:4px;
+    font-size: 14px;
+    color: white;
+    background-color: rgb(218, 167, 0);
+}
+button:hover {
+    background-color: rgb(238, 213, 144);
+}
+.appHeader {
+    color:white;
+    font-weight:bolder;
+}
+.header-container {
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+.header-nouvelles-container {
+    display: grid;
+    grid-template-columns: 19% 19% 19% 19% 19% 5% auto;
+}
+.header-nouvelles-container div {
+    font-size: 22px;
+    font-weight: bold;
+    text-align: left;
+    padding: 5px;
+    background-color: rgb(164, 131, 0);
+    color: white;
+}
+.nouvelle-list-scroll-container {
+    height: 70vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: white;
+}
+.nouvelle-list-container {
+    display: grid;
+    grid-template-columns: 19% 19% 19% 19% 15% 4.5% 4.5%;
+}
+.nouvelle-list-container div {
+    text-align: left;
+    padding: 5px;
+}
+.oddRow {
+    background-color: white;
+    border-top:1px solid white;
+    border-bottom:1px solid white;
+}
+.evenRow {
+    background-color: rgb(255, 243, 149);
+    border-top:1px solid rgb(255, 243, 149);
+    border-bottom:1px solid rgb(255, 243, 149);
+}
+.selectedRow {
+    border-top:1px solid rgb(255, 225, 0);
+    border-bottom:1px solid rgb(255, 225, 0);
+}
+.waiting {
+    font-size: 14px;
+    font-weight: bold;
+    color:rgb(194, 136, 0);
+}
+.httpError {
+    font-size: 14px;
+    font-weight: bold;
+    color:red;
+}
+.form-container {
+    overflow-y: hidden;
+}
+.form-nouvelle-container {
+    display: grid;
+    grid-template-columns:  19% 19% 19% 19% 15% 4.5% 4.5%;
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+.form-nouvelle-container div {
+    text-align: left;
+    padding: 5px;
+    background-color: rgb(238, 229, 144);
+}
+.array-container {
+    border:1px solid black;
+}
+.cell {
+    height: 40px;
+    cursor: pointer;
+    font-size: 18px;
+}
+.ellipsis {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+

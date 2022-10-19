@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta author="Nicolas Chourot">
+        <meta http-equiv="Content-Type" content="text/html; charset= ISO-8859-1">
+        <title>Gestion de nouvelles</title>
+
+        <!-- Latest compiled and minified CSS -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+
+        <!-- Style pour les infobulles -->
+        <link rel="stylesheet" href="css/tooltip.css">
+
+        <!-- Style pour l'interface et la liste des nouvelles -->
+        <link rel="stylesheet" href="css/nouvellesManagerLayout.css">
+
+        <!-- pour la dialogue de confirmation de retrait d'un nouvelle -->
+        <link rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.css">
+
+        <!-- lien vers le favicon généré par https://favicon.io/favicon-converter/ -->
+        <link rel="icon" href="favicon.ico">
+
+    </head>
+
+    <body>
+        <!-- Entête de la liste de nouvelle -->
+        <div class="container">
+            <div class="appHeader">
+                <h1><img src="favicon.ico">&nbsp;Gestionnaire de nouvelles</h1>
+            </div>
+
+            <div class="array-container">
+                <div class="header-container">
+                    <div class="header-nouvelles-container">
+                        <div>Catégorie</div>
+                        <div>Titre</div>
+                        <div>Texte</div>
+                        <div>ImageUrl</div>
+                        <div>Date</div>
+                        <div>
+                            <button id="showAddNouvelleFormCmd" tooltip="Ajouter une nouvelle" tooltip-position="left">
+                                <span class="glyphicon glyphicon-plus"></span>
+                            </button>
+                        </div>
+                        <div>&nbsp;</div>
+                    </div>
+                </div>
+                <div class="form-container">
+                    <div class="form-nouvelle-container" id="nouvelleForm">
+                        <!--
+                        Formulaire de saisie/modification de nouvelle:
+                        Contient les contrôles de saisie de nouvelle.
+                        Notez qu'il sera masqué et n'apparaitra que dans le mode d'ajout ou modification
+                        de nouvelle.
+                        -->
+                        <!-- champ masqué qui recevra le id d'un nouvelle à modifier -->
+                        <input type="hidden" id="Id" />
+                        <div>
+                            <input type="text" id="Categorie" placeholder="Catégorie" class="form-control" />
+                        </div>
+                        <div>
+                            <textarea style="resize: none;" rows="3" type="text" id="Titre" placeholder="Titre" class="form-control"></textarea>
+                        </div>
+                        <div>
+                            <textarea id="Texte" rows="6" placeholder="Texte" style="resize: none;" class="form-control"></textarea>
+                        </div>
+                        <div>
+                            <input type="text" id="ImageUrl" placeholder="Lien incluant http:// ou https://"
+                                class="form-control" />
+                        </div>
+                        <div>
+                            <input type="date" id="Date" placeholder="Date" class="form-control" />
+                        </div>
+                        <div>
+                            <!-- Noter que un seul des boutons suivants sera affiché selon le mode d'ajout ou de modification -->
+                            <!-- bouton de commande d'ajout de nouvelle -->
+                            <button id="addNouvelleCmd" tooltip="Ajouter" tooltip-position="left">
+                                <span class="glyphicon glyphicon glyphicon-ok"></span>
+                            </button>
+                            <!-- bouton de commande de modification de nouvelle -->
+                            <button id="modifyNouvelleCmd" tooltip="Modifier" tooltip-position="left">
+                                <span class="glyphicon glyphicon-ok"></span>
+                            </button>
+                        </div>
+                        <div>
+                            <!-- bouton de commande d'annulation d'ajout ou de modification de nouvelle -->
+                            <button id="cancelCmd" tooltip="Annuler" tooltip-position="left">
+                                <span class="glyphicon glyphicon-repeat"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="nouvelle-list-scroll-container">
+                    <!--Cell to calculate base height of a single cell, will be deleted-->
+                    <div id="templateCell" class="cell" hidden></div>
+                    <div class="nouvelle-list-container" id="nouvelleList">
+                        <!-- La liste de nouvelles sera injectée ici par 
+                             la fonction JavaScript updateNouvelleList(...) -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fichier local qui contient la librairie jQuery -->
+        <script src="js/jquery-3.3.1.js"></script>
+        <!-- Fichier local qui contient la librairie de Validation -->
+        <script src="js/Validation.js"></script>
+        <!-- Fichier local qui contient les fonctions de requête au service Web API -->
+        <script src="js/nouvellesManagerWebAPIRequest.js"></script>
+        <!-- Fichier local qui contient la librairie de dialogue de confirmation -->
+        <script src="js/jquery-confirm.js"></script>
+        <!-- Fichier local qui contient la librairie de gestion de champ masqué -->
+        <script src="js/jquery.maskedinput.js"></script>
+
+        <script defer>
+            "use strict";
+
+            $(document).ready(initUI);
+
+            let editMode = false;
+            let addMode = false;
+
+            // objet d'automatisation de la validation
+            let validationProvider;
+
+            const periodicRefreshPeriod = 5;
+            let currentETag = "";
+            
+            function checkETag(ETag) {
+                if (ETag != currentETag) {
+                    currentETag = ETag;
+                    let rowNum = rowCount();
+                    webAPI_GET_RANGE(0, rowNum == 0 ? numItemsForFullList() : rowNum,updateNouvelleList);
+                    //If there's no rows, we get as many items as we can fit otherwise we just get the current rows to refresh them
+                }
+            }
+
+            // Initialisation de l'interface
+            function initUI() {
+                initValidation();
+                eraseForm();
+
+                // Gestionnaires du clic sur les boutons
+                $('#addNouvelleCmd').click(addNouvelle);
+                $('#showAddNouvelleFormCmd').click(showAddNouvelleForm);
+                $('#modifyNouvelleCmd').click(modifyNouvelle);
+                $('#cancelCmd').click(eraseForm);
+                $('#Name').keypress(textInputAlphaFilter);
+
+                // Ajout d'un message d'attente de réponse du serveur.
+                // Cela peut prendre quelques secondes avant que le serveur Web
+                // redémarre après une longue période sans requête
+                insertWaitingStatus();
+
+                webAPI_HEAD(checkETag);
+                setInterval(() => {
+                    webAPI_HEAD(checkETag);
+                }, periodicRefreshPeriod * 1000);
+            }
+
+            $(".nouvelle-list-scroll-container").scroll(function () {
+                if (Math.ceil($(".nouvelle-list-scroll-container").scrollTop() + $(".nouvelle-list-scroll-container").innerHeight()) >= $(".nouvelle-list-container").height()) {
+                    getNouvellesRange();
+                }
+            });
+
+            function insertWaitingStatus() {
+                $('#nouvelleList').empty();
+                $('#nouvelleList').append(makeTextCell("En attente de réponse du service Web...", "waiting"));
+                $('#nouvelleList').append($('<img src="images/Loading_icon.gif" alt="waiting"/>'));
+            }
+
+            function insertErrorStatus(status) {
+                console.log("status:", status);
+                $('#nouvelleList').empty()
+                $('#nouvelleList').append($('<img src="images/error.png" style="width:60px;margin:10px" alt="httpError" onclick="location.reload()" title="Recharcher la page"/>'));
+                $('#nouvelleList').append(makeTextCell("Erreur de requête au service Web...", "httpError"));
+                $('#nouvelleList').append(makeTextCell(status, "httpError"));
+            }
+
+            function initValidation() {
+
+                validationProvider = new ValidationProvider();
+                validationProvider.addControl("Titre", validate_Titre);
+                validationProvider.addControl("Date", validate_Date);
+                validationProvider.addControl("Texte", validate_Texte);
+                validationProvider.addControl("ImageUrl", validate_ImageUrl);
+                validationProvider.addControl("Categorie", validate_Categorie);
+            }
+
+            function resetValidation() {
+                validationProvider.reset();
+            }
+
+            function validate_Titre() {
+                let TBX_Title = document.getElementById("Titre");
+
+                if (TBX_Title.value === "")
+                    return "Titre manquant";
+
+                return "";
+            }
+
+            
+            function validate_Texte() {
+                let TBX_Title = document.getElementById("Texte");
+
+                if (TBX_Title.value === "")
+                    return "Texte manquant";
+
+                return "";
+            }
+
+            
+            function validate_Date() {
+                let TBX_Title = document.getElementById("Date");
+
+                if (TBX_Title.value === "")
+                    return "Date manquante";
+
+                return "";
+            }
+
+            function validate_ImageUrl() {
+                let TBX_Url = document.getElementById("ImageUrl");
+                let UrlRegex = /(http|https):\/\/(\w+:{0,1}\w*)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%!\-\/]))?/;
+
+                if (TBX_Url.value === "")
+                    return "Lien manquant";
+
+                if (!UrlRegex.test(TBX_Url.value))
+                    return "Lien invalide";
+
+                return "";
+            }
+
+            function validate_Categorie() {
+                let TBX_Category = document.getElementById("Categorie");
+
+                if (TBX_Category.value === "")
+                    return "Catégorie manquante";
+
+                return "";
+            }
+
+            // Effacer les contrôles de saisie/modification d'un nouvelle
+            // et rétablir la visibilité des boutons
+            function eraseForm() {
+                addMode = false;
+                editMode = false;
+                resetValidation();
+
+                // rétablir la couleur de fond de toutes les rangées
+                $('.cell').removeClass('selectedRow');
+
+                // masquer le formulaire de saisie/modification de nouvelle
+                $('#nouvelleForm').hide(400);
+
+                // Rétablir la visibilité par défaut des boutons
+                $('#addNouvelleCmd').show();
+                $('#modifyNouvelleCmd').hide();
+                $('#showAddNouvelleFormCmd').show();
+
+                // Effacer les champs du formulaire
+                $('#Id').val('');
+                $('#Categorie').val('');
+                $('#Titre').val('');
+                $('#Texte').val('');
+                $('#ImageUrl').val('');
+                $('#Date').val('');
+
+                // Masquer tous les boutons des rangées de nouvelle
+                $('#nouvelleList button').hide();
+
+            }
+
+            // Requête au service web API: Liste des nouvelles
+            function getNouvelles() {
+                webAPI_getNouvelles(updateNouvelleList, insertErrorStatus);
+            }
+
+            function numItemsForFullList(){
+                let templateHeight = $('#templateCell').height();
+                let scrollContainerHeight = $('.nouvelle-list-scroll-container').innerHeight();
+                return Math.ceil(scrollContainerHeight/templateHeight);
+            }
+
+            function rowCount(){
+                let rows = $('[class^="row_"]').map(function(){ return $(this).attr('class').split(" ")[0]; });
+                return $.unique(rows).length;
+            }
+
+            function getNouvellesRange(){
+                webAPI_getNouvellesRange(rowCount(),numItemsForFullList(),appendNouvelleList, insertErrorStatus);
+            }
+
+            function getCurrentNouvellesRange(){
+                webAPI_getNouvellesRange(0,rowCount(),updateNouvelleList, insertErrorStatus);
+            }
+
+            // Afficher le formulaire pour la saisie de nouvelle
+            function showAddNouvelleForm() {
+                addMode = true;
+                $('#addNouvelleCmd').show();
+                $('#nouvelleForm').show(400);
+                $('#showAddNouvelleFormCmd').hide();
+            }
+
+            // Afficher le formulaire pour la modification de nouvelle
+            function showEditNouvelleForm(e) {
+                editMode = true;
+                $('#addNouvelleCmd').hide();
+                $('#showAddNouvelleFormCmd').hide();
+                $('#nouvelleForm').show(400);
+
+                let nouvelleId = e.currentTarget.id.split('_')[1];
+
+                // Extraction du nouvelle de Id = nouvelleId via le service web API
+                webAPI_getNouvelle(nouvelleId, setFormData);
+            }
+
+            function setFormData(nouvelle) {
+                // peupler les contrôles de saisie
+                $('#Id').val(nouvelle.Id); // input caché qui mémorise le Id du nouvelle
+                $('#Categorie').val(nouvelle.Categorie);
+                $('#Titre').val(nouvelle.Titre);
+                $('#Texte').val(nouvelle.Texte);
+                $('#ImageUrl').val(nouvelle.ImageUrl);
+                $('#Date').val(getShortISODate(nouvelle.Date));
+
+                $('#modifyNouvelleCmd').show();
+            }
+
+            // Retourne un objet nouvelle à partir des valeurs prélevées se trouvant dans les contrôles de saisie.
+            // Si le paramètre includeId est vrai, inclure le Id du nouvelle dans l'objet nouvelle retourné
+            function makeNouvelleFromForm(includeId = false) {
+                let id = 0;
+
+                if (includeId) {
+                    // Récupération du Id du nouvelle dans le contrôle caché
+                    id = parseInt($('#Id').val());
+                };
+
+                return { 
+                    Id: id, 
+                    Titre: $('#Titre').val(), 
+                    ImageUrl: $('#ImageUrl').val(), 
+                    Texte: $('#Texte').val(), 
+                    Date: `${new Date($('#Date').val()).getTime()}`, 
+                    Categorie: $('#Categorie').val() 
+                };
+            }
+
+            // Ajout d'un nouvelle
+            function addNouvelle() {
+                let nouvelle = makeNouvelleFromForm();
+                if (validationProvider.isValid()) {
+                    eraseForm();
+                    webAPI_addNouvelle(nouvelle, getCurrentNouvellesRange, insertErrorStatus);
+                }
+            }
+
+            // Requête au service Web API: Modification d'un nouvelle
+            function modifyNouvelle() {
+                // construction de l'objet nouvelle
+                let nouvelle = makeNouvelleFromForm(true);
+                if (validationProvider.isValid()) {
+                    webAPI_modifyNouvelle(nouvelle, getCurrentNouvellesRange, insertErrorStatus);
+                }
+            }
+
+            // Après confirmation, requête au service Web API de retrait d'un nouvelle
+            function deleteNouvelle(e) {
+                // Extraction du Id du nouvelle inscrit dans l'attribut id de l'élément déclencheur de l'événement click
+                let nouvelleId = parseInt(e.currentTarget.id.split('_')[1]);
+
+                webAPI_getNouvelle(nouvelleId, confirmDeleteNouvelle, insertErrorStatus);
+            }
+
+            function confirmDeleteNouvelle(nouvelle) {
+                $.confirm({
+                    title: 'Attention!',
+                    content: 'Effacer <i>' + nouvelle.Titre + '</i> ?',
+                    buttons: {
+                        confirmer: function () {
+                            webAPI_deleteNouvelle(nouvelle.Id, getCurrentNouvellesRange, insertErrorStatus);
+                        },
+                        annuler: {},
+                    }
+                });
+            }
+
+            // Sur le survol d'une rangée, faire apparaître les boutons edit et delete
+            function cellOver(e) {
+                if (!addMode && !editMode) {
+                    // currentTarget.className contient en principe : 'row_x cell ...'
+                    let nouvelleId = e.currentTarget.className.split(' ')[0].split('_')[1];
+                    $('#edit_' + nouvelleId).show();
+                    $('#delete_' + nouvelleId).show();
+                    $('.row_' + nouvelleId).addClass('selectedRow');
+                }
+            }
+
+            // Sur le l'évacuation d'une rangée, faire disparaître les boutons edit et delete
+            function cellBlur(e) {
+                if (!editMode) {
+                    // currentTarget.className contient en principe : 'row_x cell ...'
+                    let nouvelleId = e.currentTarget.className.split(' ')[0].split('_')[1];
+                    $('#edit_' + nouvelleId).hide();
+                    $('#delete_' + nouvelleId).hide();
+                    $('.row_' + nouvelleId).removeClass('selectedRow');
+                }
+            }
+
+            function makeNouvelleTitle(title, url, cssClass) {
+                let div = $('<div class= "' + cssClass + '"></div>');
+                let favicon = $(`<img src="https://www.google.com/s2/favicons?domain=${url}&sz=24">`);
+                div.append(favicon);
+                div.append($(`<span>&nbsp;${title}</span>`));
+                return div;
+            }
+
+            function makeDateCell(date, cssClass){
+                return $(`<div class='${cssClass}'>${getShortISODate(date)}</div>`);
+            }
+
+            function makeLinkCell(url, cssClass) {
+                return $(`<div class='${cssClass}'><a href='${url}' target='_blank'>${url}</a></div>`);
+            }
+
+            function makeTextCell(content, cssClass) {
+                return $('<div class= "' + cssClass + '">' + content + '</div>');
+            }
+
+            function makeCell(cssClass) {
+                return $('<div class= "' + cssClass + '"></div>');
+            }
+
+            function makeButton(cssClass, id, tooltip) {
+                return $('<button id="' + id + '" class="' + cssClass + '"tooltip="' + tooltip + '" tooltip-position="left"></button>');
+            }
+
+            function makeGlyphIcon(glyphIconId) {
+                return $("<span class='glyphicon glyphicon-" + glyphIconId + "'></span>");
+            }
+
+            // Rafraichir la liste des nouvelles
+            // paramètre nouvelles: tableau d'objets nouvelle
+            function updateNouvelleList(nouvelles) {
+                eraseForm();
+                var oddRow = true;
+                // effacer le tableau affichant la liste de nouvelles
+                $('#nouvelleList').empty();
+
+                // pour tous les nouvelles du tableau nouvelles
+                nouvelles.forEach(nouvelle => { // créer une nouvelle rangée
+
+                    // déterminer la couleur de la rangée
+                    let bgColorRow = "row_" + nouvelle.Id + (oddRow ? " oddRow" : " evenRow") + " cell ";
+
+                    // Distribution des données du nouvelle dans des cellules de la rangée
+                    $('#nouvelleList').append(makeTextCell(nouvelle.Categorie, bgColorRow + " ellipsis"));
+                    $('#nouvelleList').append(makeTextCell(nouvelle.Titre, bgColorRow + " ellipsis"));
+                    $('#nouvelleList').append(makeTextCell(nouvelle.Texte, bgColorRow + " ellipsis"));
+                    $('#nouvelleList').append(makeLinkCell(nouvelle.ImageUrl, bgColorRow + " ellipsis"));
+                    $('#nouvelleList').append(makeDateCell(nouvelle.Date, bgColorRow + " ellipsis"));
+
+
+                    // Bouton d'appel à la modification du nouvelle
+                    $('#nouvelleList')
+                        .append(makeCell(bgColorRow)
+                            .append(makeButton("editNouvelleCmd", "edit_" + nouvelle.Id, "Modifier")
+                                .append(makeGlyphIcon('pencil'))));
+
+                    // Bouton d'appel au retrait du nouvelle
+                    $('#nouvelleList')
+                        .append(makeCell(bgColorRow)
+                            .append(makeButton("deleteNouvelleCmd", "delete_" + nouvelle.Id, "Effacer")
+                                .append(makeGlyphIcon('remove'))));
+
+                    oddRow = !oddRow;
+                });
+
+                // Attacher les gestionnaires du clic aux nouveaux boutons
+                $('.editNouvelleCmd').click(showEditNouvelleForm);
+                $('.deleteNouvelleCmd').click(deleteNouvelle);
+                $('#nouvelleList button').hide();
+                //$('input').on("paste", function (e) { e.preventDefault(); });
+
+                // Attacher les événements pour mettre en surbrillance la rangée survolée
+                // et faire apparaitre les icons d'édition et de retrait
+                $('.cell').mouseover(cellOver);
+                $('.cell').mouseleave(cellBlur);
+            }
+            
+
+            function appendNouvelleList(nouvelles){
+                var oddRow = rowCount() % 2 == 0;
+
+                // pour tous les nouvelles du tableau nouvelles
+                nouvelles.forEach(nouvelle => { // créer une nouvelle rangée
+
+                    // déterminer la couleur de la rangée
+                    let bgColorRow = "row_" + nouvelle.Id + (oddRow ? " oddRow" : " evenRow") + " cell ";
+
+                    // Distribution des données du nouvelle dans des cellules de la rangée
+                    let cells = [
+                        makeTextCell(nouvelle.Categorie, bgColorRow + " ellipsis"),
+                        makeTextCell(nouvelle.Titre, bgColorRow + " ellipsis"),
+                        makeTextCell(nouvelle.Texte, bgColorRow + " ellipsis"),
+                        makeLinkCell(nouvelle.ImageUrl, bgColorRow + " ellipsis"),
+                        makeDateCell(nouvelle.Date, bgColorRow + " ellipsis"),
+                    ];
+                    
+                    // Bouton d'appel à la modification du nouvelle
+                    let editButton = makeButton("editNouvelleCmd", "edit_" + nouvelle.Id, "Modifier")
+                        .append(makeGlyphIcon('pencil'));
+                        
+                    // Bouton d'appel au retrait du nouvelle
+                    let deleteButton = 
+                        makeButton("deleteNouvelleCmd", "delete_" + nouvelle.Id, "Effacer")
+                            .append(makeGlyphIcon('remove'));
+                    
+                    deleteButton.click(deleteNouvelle);
+                    deleteButton.hide();
+                    editButton.click(showEditNouvelleForm);
+                    editButton.hide();
+
+                    cells.push(makeCell(bgColorRow).append(editButton), makeCell(bgColorRow).append(deleteButton));
+
+                    cells.forEach((e) => {
+                        e.mouseover(cellOver);
+                        e.mouseleave(cellBlur);
+                        $('#nouvelleList').append(e);
+                    });
+
+                    oddRow = !oddRow;
+                });
+
+                // Attacher les gestionnaires du clic aux nouveaux boutons
+                // $('.editNouvelleCmd').click(showEditNouvelleForm);
+                // $('.deleteNouvelleCmd').click(deleteNouvelle);
+                // $('#nouvelleList button').hide();
+                //$('input').on("paste", function (e) { e.preventDefault(); });
+
+                // Attacher les événements pour mettre en surbrillance la rangée survolée
+                // et faire apparaitre les icons d'édition et de retrait
+
+            }
+
+            function getShortISODate(miliseconds){
+                return new Date(parseInt(miliseconds)).toISOString().slice(0,10);
+            }
+
+        </script>
+    </body>
+</html>
